@@ -125,7 +125,7 @@ class CallCenterSim(Simulator):
         while True:
             for i in range(0, Call.predicted_calls):
                 self.launch(Call())        
-                yield 1/3600
+                yield 0.1/3600
             yield Listener('AgentIsIdle')  # per 5 minutes
             #~ yield 1/60
             #~ Call.predicted_calls = Call.idle_agents

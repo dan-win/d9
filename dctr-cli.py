@@ -4,6 +4,8 @@ env = dialercontrol.PIEnvironment().\
                 extendfrom(\
                     dialercontrol.CLIEnvironment()\
                 )
-print dialercontrol.PIController(env).predict_outgoing_calls()
+print '\n'.join(env.dump())
+print '---'
+print dialercontrol.PIController(env).predict_outgoing_calls(debug=True)
 
 

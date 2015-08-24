@@ -332,55 +332,83 @@ class PIController(ProgressiveSolver):
         self.integrator = 0
         self.lasterror = ''
     
-    def predict_outgoing_calls(self):
+    def predict_outgoing_calls(self, debug=False):
+        def _trace(msg=None): 
+            if debug: 
+                print msg or self.lasterror
+        
         import math
         
         e = self.e
         
+        _trace('\nActual values for environment:')
+        _trace('\n'.join(e.dump()))
+        _trace('\n')
+        
         # Validate dataset values
         if e.calls_total < e.calls_answered:
-            raise ESolverError('e.calls_total < e.calls_answered')
+            self.lasterror = 'Critical error: e.calls_total < e.calls_answered'
+            _trace()
+            raise ESolverError(self.lasterror)
         
         # Handle values below threshold(s):
         
         if e.idle_agents < e.min_idle_agents:
             # return zero and wait while min_idle_agents will be available
             # otherwise we always in progressive mode!
+            self.lasterror = 'uptime below threshold'
+            _trace()
             return 0
 
         # Switch to pregressive mode in the following cases:
         if e.uptime < e.uptime_threshold:
             self.lasterror = 'uptime below threshold'
+            _trace()
             return ProgressiveSolver.predict_outgoing_calls(self)
             
         if e.calls_answered < e.calls_threshold:
             self.lasterror = 'calls_answered below threshold'
+            _trace()
             return ProgressiveSolver.predict_outgoing_calls(self) 
             
         if e.predict_adjust == 0:
             self.lasterror = 'predict_adjust is 0'
+            _trace()
             return ProgressiveSolver.predict_outgoing_calls(self) 
 
         # if current abandoned cals > 3% - switch to progressive mode
         n_abandoned_calls = float (e.calls_answered - e.calls_served) / e.calls_answered
+        _trace('abandoned rate={}'.format(n_abandoned_calls))
+        
         if n_abandoned_calls > e.max_abandon_calls:
             self.lasterror = 'n_abandoned_calls over threshold'
+            _trace()
             return ProgressiveSolver.predict_outgoing_calls(self) 
 
-        over_dial = 0
+        connection_rate, over_dial = 0, 0
         try:
-            connection_rate = e.calls_answered / e.calls_total
-            over_dial = float(e.idle_agents)/connection_rate - e.idle_agents
+            connection_rate = float(e.calls_answered) / e.calls_total
         except ZeroDivisionError:
             self.lasterror = 'calls_total is zero'
+            _trace()
+            return ProgressiveSolver.predict_outgoing_calls(self) 
+        
+        try:
+            over_dial = float(e.idle_agents)/connection_rate - e.idle_agents
+        except ZeroDivisionError:
+            self.lasterror = 'connection_rate is zero'
+            _trace()
             return ProgressiveSolver.predict_outgoing_calls(self) 
 
         # tune predict_adjust
-        deviation = n_abandoned_calls - e.target_abandon_calls
+        deviation = e.target_abandon_calls - n_abandoned_calls 
+        _trace('deviation={}'.format(deviation))
         
         P_value = e.ctr_proportional_gain * deviation
+        _trace('P_value={}'.format(P_value))
 
         self.integrator = self.integrator + deviation
+        _trace('self.integrator={}'.format(self.integrator))
 
         #~ if self.integrator > 500:
                 #~ self.integrator = 500
@@ -388,9 +416,10 @@ class PIController(ProgressiveSolver):
                 #~ self.integrator = -500
 
         I_value = self.integrator * e.ctr_integral_gain
+        _trace('I_value={}'.format(I_value))
 
-        e.predict_adjust = e.predict_adjust + (P_value + I_value) * 10        
-        
+        e.predict_adjust = e.predict_adjust + (P_value + I_value) * 100        
+        _trace('e.predict_adjust={}'.format(e.predict_adjust))
 
         calls_to_dial = math.trunc(e.idle_agents + (over_dial * e.predict_adjust) * 0.01)
 
