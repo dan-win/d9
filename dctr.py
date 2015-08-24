@@ -216,7 +216,6 @@ Where:
 class PIEnvironment(Environment):
 
     def __init__(self, **kwargs):
-        Environment.__init__(self, **kwargs)
         # Set default constants:
         self.ctr_integral_gain = 0.05
         self.ctr_proportional_gain = 2.0
@@ -229,7 +228,22 @@ class PIEnvironment(Environment):
         self.target_abandon_calls = 2.5 / 100 # %
         self.max_abandon_calls = 3.0 /100 # %
         # set default values:
-        pass
+
+        #~ self.total_agents = 0
+        self.idle_agents = 0
+
+        self.calls_total = 0 # all outbound calls
+        self.calls_answered = 0 # served + abandoned
+        #~ self.calls_congested = 0 # rejected calls due to network overload
+        self.calls_served = 0 # call processed by agents
+
+        self.uptime = 0 # uptime in seconds
+        self.interval = 1 # interval from last call in seconds
+        
+        # constructor call must be at the end,
+        # othwervise **kwarg values will be lost:
+        Environment.__init__(self, **kwargs)
+
 
 ##############################################
 # SOLVER classes
@@ -240,7 +254,7 @@ class Solver(object):
     Abstract class, base for solvers.
     Defines main protocol methods
     """
-    requires = []
+    required = []
 
     def __init__(self, environment=None):
         self.e = None
@@ -257,7 +271,7 @@ class Solver(object):
         for key in self.required:
             if not hasattr(self.e, key):
                 raise ESolverError(
-                    "Environment is not corresponds to solver: required attribute '{}' missed!".format(key))
+                    "Environment does not correspond to solver:\n required attribute '{}' missed!".format(key))
         pass
         
     def predict_outgoing_calls(self):
@@ -283,7 +297,7 @@ class PIController(ProgressiveSolver):
     ['calls_answered:300', 'calls_served:299', 'calls_threshold:10', 'calls_total:1000', 'ctr_integral_gain:0.05', 'ctr_proportional_gain:2.0', 'idle_agents:10', 'interval:300', 'max_abandon_calls:0.03', 'min_idle_agents:3', 'predict_adjust:150.0', 'target_abandon_calls:0.025', 'uptime:1000', 'uptime_threshold:300']
 
     >>> c.predict_outgoing_calls()
-    
+    10
     """
 
     required = [
@@ -316,26 +330,41 @@ class PIController(ProgressiveSolver):
     def __init__(self, environment=None):
         ProgressiveSolver.__init__(self, environment)
         self.integrator = 0
+        self.lasterror = ''
     
     def predict_outgoing_calls(self):
         import math
         
         e = self.e
         
+        # Validate dataset values
+        if e.calls_total < e.calls_answered:
+            raise ESolverError('e.calls_total < e.calls_answered')
+        
+        # Handle values below threshold(s):
+        
         if e.idle_agents < e.min_idle_agents:
             # return zero and wait while min_idle_agents will be available
-            # otherwise we alway in progressive mode!
+            # otherwise we always in progressive mode!
             return 0
 
-        # Switch to pregressive mode:
-        if e.uptime < e.uptime_threshold or \
-            e.calls_answered < e.calls_threshold or\
-            e.predict_adjust == 0:
+        # Switch to pregressive mode in the following cases:
+        if e.uptime < e.uptime_threshold:
+            self.lasterror = 'uptime below threshold'
+            return ProgressiveSolver.predict_outgoing_calls(self)
+            
+        if e.calls_answered < e.calls_threshold:
+            self.lasterror = 'calls_answered below threshold'
+            return ProgressiveSolver.predict_outgoing_calls(self) 
+            
+        if e.predict_adjust == 0:
+            self.lasterror = 'predict_adjust is 0'
             return ProgressiveSolver.predict_outgoing_calls(self) 
 
         # if current abandoned cals > 3% - switch to progressive mode
         n_abandoned_calls = float (e.calls_answered - e.calls_served) / e.calls_answered
         if n_abandoned_calls > e.max_abandon_calls:
+            self.lasterror = 'n_abandoned_calls over threshold'
             return ProgressiveSolver.predict_outgoing_calls(self) 
 
         over_dial = 0
@@ -343,7 +372,8 @@ class PIController(ProgressiveSolver):
             connection_rate = e.calls_answered / e.calls_total
             over_dial = float(e.idle_agents)/connection_rate - e.idle_agents
         except ZeroDivisionError:
-            return e.idle_agents
+            self.lasterror = 'calls_total is zero'
+            return ProgressiveSolver.predict_outgoing_calls(self) 
 
         # tune predict_adjust
         deviation = n_abandoned_calls - e.target_abandon_calls
