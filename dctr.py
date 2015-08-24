@@ -58,10 +58,10 @@ class Environment(object):
 
     >>> e1 = Environment(a=1, b='string', c=True, d=0.1)
     >>> e1.dump()
-    'a=1 b=string c=True d=0.1'
+    ['a:1', 'b:string', 'c:True', 'd:0.1']
     >>> e2 = Environment()
     >>> e1.extendfrom(e2).dump()
-    'a=1 b=string c=True d=0.1'
+    ['a:1', 'b:string', 'c:True', 'd:0.1']
     """
 
     def __init__(self, **kwargs):
@@ -90,8 +90,8 @@ class Environment(object):
         for name in attr_names:
             if name.startswith('_'):
                 continue
-            buff.append('{0}={1}'.format(name, getattr(self, name)))
-        return ' '.join(buff)
+            buff.append('{0}:{1}'.format(name, getattr(self, name)))
+        return buff
         
     
     def extendfrom(self, source):
@@ -276,6 +276,15 @@ class ProgressiveSolver(Solver):
         
 # *** Predictive solver ***
 class PIController(ProgressiveSolver):
+    """
+    >>> e = PIEnvironment(idle_agents=10,calls_total=1000,calls_answered=300,calls_served=299,uptime=1000,interval=300)
+    >>> c = PIController(e)
+    >>> c.e.dump()
+    ['calls_answered:300', 'calls_served:299', 'calls_threshold:10', 'calls_total:1000', 'ctr_integral_gain:0.05', 'ctr_proportional_gain:2.0', 'idle_agents:10', 'interval:300', 'max_abandon_calls:0.03', 'min_idle_agents:3', 'predict_adjust:150.0', 'target_abandon_calls:0.025', 'uptime:1000', 'uptime_threshold:300']
+
+    >>> c.predict_outgoing_calls()
+    
+    """
 
     required = [
         # set default values:
@@ -297,7 +306,7 @@ class PIController(ProgressiveSolver):
         # here is 5-minutes depth
         'calls_total', # all outbound calls
         'calls_answered', # served + abandoned
-        'calls_congested', # rejected calls due to network overload
+        #~ 'calls_congested', # rejected calls due to network overload
         'calls_served', # call processed by agents
 
         'uptime', # uptime in seconds
@@ -305,7 +314,7 @@ class PIController(ProgressiveSolver):
     ]
     
     def __init__(self, environment=None):
-        ProgressiveSolver.__init__(self, environment=None)
+        ProgressiveSolver.__init__(self, environment)
         self.integrator = 0
     
     def predict_outgoing_calls(self):
