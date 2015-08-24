@@ -341,9 +341,9 @@ class PIController(ProgressiveSolver):
         
         e = self.e
         
-        _trace('\nActual values for environment:')
-        _trace('\n'.join(e.dump()))
-        _trace('\n')
+        #~ _trace('\nActual values for environment:')
+        #~ _trace('\n'.join(e.dump()))
+        #~ _trace('\n')
         
         # Validate dataset values
         if e.calls_total < e.calls_answered:

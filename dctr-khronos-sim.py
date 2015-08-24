@@ -2,6 +2,7 @@ from khronos.des import Simulator, Process, Chain, Signal, Listener
 from khronos.des.extra.components.resources import Resource
 from khronos.statistics import TSeries, Plotter
 
+import dctr as predict
 
 class Call(Process):
     """Represents simulated environment of incoming calls"""
@@ -76,8 +77,21 @@ class Call(Process):
 
         pass # end                
 
-
-import cccontrol as predict
+#~ class Agent(Process):
+    
+    #~ talk_time_min = 10.0 / 60 # 10 minutes
+    #~ talk_time_max = 20.0 / 60 # 20 minutes
+    
+    #~ def service_time(self):
+        #~ # assume uniform distribution for call duration
+        #~ # to-do: poisson or erlang distribution (?)
+        #~ return self.sim.rng.uniform(Agent.talk_time_min, Agent.talk_time_max)
+        
+    #~ @Chain
+    #~ def initialize(self):
+        #~ self.idle_time = 0
+    
+    
 
 class CallCenterSim(Simulator):
     """Generates customer traffic and resets 'served' and 'happy' counters at initialization."""
@@ -125,11 +139,12 @@ class CallCenterSim(Simulator):
         while True:
             for i in range(0, Call.predicted_calls):
                 self.launch(Call())        
-                yield 0.1/3600
-            yield Listener('AgentIsIdle')  # per 5 minutes
-            #~ yield 1/60
-            #~ Call.predicted_calls = Call.idle_agents
+                #~ yield 5.0/3600
+                yield (1.0/rate)/3600
+            yield Listener('AgentIsIdle')  
+
             Call.predicted_calls = CallCenterSim.solver.predict_outgoing_calls()
+            
             #~ self.launch(Call())
             #~ yield self.rng.expovariate(CallCenterSim.rate)
 
