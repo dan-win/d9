@@ -10,7 +10,7 @@ class ESolverError(Exception):
     def __init__(self, value):
         self.value = value
     def __str__(self):
-        return repr(self.value)  
+        return str(self.value)  
 
 class EEnvironmentError(ESolverError):
     """
@@ -56,18 +56,44 @@ class Environment(object):
 
     Sample:
 
-    >>> e1 = Environment({a=1, b='string'})
-
+    >>> e1 = Environment(a=1, b='string', c=True, d=0.1)
+    >>> e1.dump()
+    'a=1 b=string c=True d=0.1'
     >>> e2 = Environment()
-    >>> e1.extendfrom(e2)
-
+    >>> e1.extendfrom(e2).dump()
+    'a=1 b=string c=True d=0.1'
     """
 
     def __init__(self, **kwargs):
         for name, value in kwargs.items():
             setattr(self, name, value)
 
+    def _enumownprops(self):
+        import numbers
+        buff = []
+        attr_names = dir(self)
 
+        for name in attr_names:
+            # private or protected attr:
+            if name.startswith('_'): 
+                continue
+            # Bypass complex type(s)
+            value = getattr(self, name)
+            if isinstance(value, (numbers.Number, TYPE_STRING,)):
+                buff.append(name)
+        buff.sort()
+        return buff
+
+    def dump(self):
+        attr_names = self._enumownprops()
+        buff=[]
+        for name in attr_names:
+            if name.startswith('_'):
+                continue
+            buff.append('{0}={1}'.format(name, getattr(self, name)))
+        return ' '.join(buff)
+        
+    
     def extendfrom(self, source):
         """
         Apply all public fields and their values 
@@ -75,25 +101,27 @@ class Environment(object):
         Note that "source" can be object of
         any type (e.g., named tuple).
         """
-
-        attr_names = dir(source)
+        if not isinstance(source, Environment):
+            raise EEnvironmentError( \
+                '.extendfrom() argument must be an Environment instance!')
+            
+        attr_names = source._enumownprops()
 
         for name in attr_names:
             # private or protected attr:
-            if attr.startswith('_'): 
+            if name.startswith('_'): 
                 continue
             # Bypass complex type(s)
-            attr = getattr(self, name)
-            if isinstance(attr, (
-                TYPE_LIST, TYPE_DICT, TYPE_OBJ)):
-                continue
-            # extract value if attribute is "computed value":
-            if isinstance(attr, TYPE_FUNC):
-                value = value()
+            value = getattr(source, name)
+            # to-do:
+            #~ # extract value if attribute is "computed value":
+            #~ if isinstance(value, TYPE_FUNC):
+                #~ value = value()
             # create attr in target env
             # and copy value
             setattr(self, name, value)
-
+        
+        # for chaining:
         return self 
         # end of "extend"
 
@@ -106,23 +134,61 @@ class CLIEnvironment(Environment):
     <name>=<value>
     """
     
+    required = [
+        'idle_agents',
+
+        # add query functions with parameters (qty, time) with selectable depth
+
+        # here is 5-minutes depth
+        'calls_total', # all outbound calls
+        'calls_answered', # served + abandoned
+        #~ 'calls_congested', # rejected calls due to network overload
+        'calls_served', # call processed by agents
+
+        'uptime', # uptime in seconds
+        'interval' # interval from last call in seconds
+    ]
+    
+    hint = {
+        'idle_agents': 'Number of idle (free) agents',
+
+        # add query functions with parameters (qty, time) with selectable depth
+
+        # here is 5-minutes depth
+        'calls_total': 'All dialed outbound calls (integer)', # all outbound calls
+        'calls_answered': 'All answered calls (including voicemal, fax)  (integer)', # served + abandoned
+        #~ 'calls_congested', # rejected calls due to network overload
+        'calls_served': 'Calls processed by agents  (integer)',
+
+        'uptime': 'Uptime of call center in seconds',
+        'interval': 'Observed nterval from in seconds'
+    }
+    
     @staticmethod
     def help():
         """
         Print hint about usage.
         """
+        arg_hints = [': '.join((k, v)) for k, v in CLIEnvironment.hint.items()]
         return \
-        """ 
-        Not all arguments specified.
-        Usage:
-        <scriptname> total=<value> idle=<integer>
-            Where:
-            total: total number of agents
-            idle: number of idle agents
-        """
+    """ 
+Not all arguments specified.
+Usage:
+<scriptname> {}
+
+Where:
+\t{}
+        """.format( \
+            ' '.join(['{}=<value>'.format(name) for name in CLIEnvironment.required]), \
+            '\n\t'.join(arg_hints))
         
-    def __init__(self):
-        import sys
+    def __init__(self, **kwargs):
+        Environment.__init__(self, **kwargs)
+        try:
+            import sys
+        except ImportError:
+            raise ECliError(
+                'Module "sys" is not available.\nCommand-line option disabled.')
         args = sys.argv
         data = {}
         
@@ -139,13 +205,13 @@ class CLIEnvironment(Environment):
                     "Argument value must be an integer number!")
         
         # Extract values from parsed arg text:
-        try:
-            self.total_agents = data["total"]
-            self.idle_agents = data["idle"]
-        except KeyError:
-            # Print hint and exit:
-            raise ECliError(self.help())
-
+        for name in CLIEnvironment.required:
+            try:
+                setattr(self, name, data[name])
+            except KeyError:
+                # Print hint and exit:
+                print self.help()
+                sys.exit()
 
 class PIEnvironment(Environment):
 
@@ -176,6 +242,10 @@ class Solver(object):
     """
     requires = []
 
+    def __init__(self, environment=None):
+        self.e = None
+        if environment:
+            self.observe(environment)
             
     def observe(self, environment):
         """ 
@@ -219,7 +289,7 @@ class PIController(ProgressiveSolver):
         'target_abandon_calls',
         'max_abandon_calls',
 
-        'total_agents',
+        #~ 'total_agents',
         'idle_agents',
 
         # add query functions with parameters (qty, time) with selectable depth
@@ -234,7 +304,8 @@ class PIController(ProgressiveSolver):
         'interval' # interval from last call in seconds
     ]
     
-    def __init__(self):
+    def __init__(self, environment=None):
+        ProgressiveSolver.__init__(self, environment=None)
         self.integrator = 0
     
     def predict_outgoing_calls(self):
@@ -286,16 +357,7 @@ class PIController(ProgressiveSolver):
 
         return calls_to_dial 
 
-
-def main():
-    env = PIEnvironment()
-    input = CLIEnvironment()
-    env.extendfrom(input)    
-    s = PIController()
-    s.observe(env)
-    print s.predict_outgoing_calls()
-
 if __name__ == "__main__":
-    main()
-
+    import doctest
+    doctest.testmod()
 
