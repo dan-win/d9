@@ -2,6 +2,8 @@ from khronos.des import Simulator, Process, Chain, Signal, Listener
 from khronos.des.extra.components.resources import Resource
 from khronos.statistics import TSeries, Plotter
 
+import numpy
+
 import dctr as predict
 
 class Call(Process):
@@ -36,8 +38,8 @@ class Call(Process):
     # simulation settings:
     p_answer = 0.2 # 20% probability of a live call response
         
-    talk_time_min = 10.0 / 60 # 10 minutes
-    talk_time_max = 20.0 / 60 # 20 minutes
+    talk_time_min = 10.0 * 60 # 10 minutes
+    talk_time_max = 20.0 * 60 # 20 minutes
     
     predicted_calls = 0
     
@@ -50,12 +52,13 @@ class Call(Process):
     def service_time(self):
         # assume uniform distribution for call duration
         # to-do: poisson or erlang distribution (?)
-        return self.sim.rng.uniform(Call.talk_time_min, Call.talk_time_max)
+        #~ return self.sim.rng.uniform(Call.talk_time_min, Call.talk_time_max)
+        return numpy.random.poisson(70)
 
     @Chain
     def initialize(self):
         # Update "uptime"
-        Call.uptime = int(self.sim.time * 3600) # convert to seconds (for solver)
+        Call.uptime = int(self.sim.time) # convert to seconds (for solver)
         # Count calls:
         Call.calls_total += 1
         
@@ -96,7 +99,7 @@ class Call(Process):
 class CallCenterSim(Simulator):
     """Generates customer traffic and resets 'served' and 'happy' counters at initialization."""
     #~ rate = 40.0 # clients per hour (arrival rate)
-    rate = 960.0 # outbound calls per hour
+    rate = 2 # outbound calls per second
     
     total_agents = 0
     
@@ -134,18 +137,18 @@ class CallCenterSim(Simulator):
 
     @Chain
     def initialize(self):
-        # start process:
-        
+        # start process:        
         while True:
-            for i in range(0, Call.predicted_calls):
-                self.launch(Call())        
+            #~ for i in range(0, Call.predicted_calls):
+                #~ self.launch(Call())        
                 #~ yield 5.0/3600
-                yield (1.0/rate)/3600
-            yield Listener('AgentIsIdle')  
+                #~ yield (1.0/rate)/3600
+            #~ yield Listener('AgentIsIdle')  
+            #~ Call.predicted_calls = CallCenterSim.solver.predict_outgoing_calls()
 
-            Call.predicted_calls = CallCenterSim.solver.predict_outgoing_calls()
-            
-            #~ self.launch(Call())
+
+            self.launch(Call())
+            yield 1/CallCenterSim.rate
             #~ yield self.rng.expovariate(CallCenterSim.rate)
 
 
@@ -153,32 +156,32 @@ def compute_abandoned():
     try:
         return float(Call.calls_answered - Call.calls_served) / Call.calls_answered
     except ZeroDivisionError:
-        return 0
-        
+        return 0        
 
 class Collector(Process):
     """Periodically collects customer happiness to a time series."""
-    collect_interval = 0.5
+    collect_interval = 60*10
 
     @Chain
     def initialize(self):
-        self.stat = TSeries(storing=True, time_fnc=self.sim.clock.get, time_scale=24.0)
+        self.stat = TSeries(storing=True, time_fnc=self.sim.clock.get, time_scale=10.0*3600)
         while True:
             self.stat.collect(100.0 * (compute_abandoned()))
             yield self.collect_interval
 
 def main_collection():
     colors = ("red", "green", "blue", "yellow", "black")
-    for n in (20,):
+    plotter = Plotter()
+    for n in (22,):
         print "n =", n
         CallCenterSim.total_agents = n
         sim = CallCenterSim("callcenter")
         sim.stack.trace = False
         sim["collector"] = Collector()
-        plotter = Plotter()
+        
         axes = plotter.add_axes()
         for run in xrange(5):
-            sim.single_run(24) # 24 hour
+            sim.single_run(10*3600) # 10 hour
             sim["collector"].stat.run_chart(axes=axes, color=colors[run])
             pcnt_abandoned = compute_abandoned()
             print "\trun %d, abandoned = %.2f%%, total = %i, served = %i, answered = %i, predicted = %i, idle_agents = %i, p_adjust = %i" % (run, 100.0 * pcnt_abandoned, Call.calls_total, Call.calls_served, Call.calls_answered, Call.predicted_calls, Call.idle_agents, Call.predict_adjust)
