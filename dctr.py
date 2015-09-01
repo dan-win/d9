@@ -219,14 +219,14 @@ class PIEnvironment(Environment):
         # Set default constants:
         self.ctr_integral_gain = 0.05
         self.ctr_proportional_gain = 2.0
-        self.predict_adjust = 150.0
+        self.predict_adjust = 100.0
 
         self.uptime_threshold = 5 * 60 # 5 minutes
         self.calls_threshold = 10
         self.min_idle_agents = 3
 
         self.target_abandon_calls = 2.5 / 100 # %
-        self.max_abandon_calls = 3.0 /100 # %
+        self.max_abandon_calls = 2.7 /100 # %
         # set default values:
 
         #~ self.total_agents = 0

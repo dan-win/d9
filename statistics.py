@@ -15,27 +15,6 @@ except ImportError:
     print "Requires matplotlib and numpy modules!"
     sys.exit(1)
 
-data = []
-
-def timefromtimestr(s):
-    """ Decode from text like 00:00:00"""
-    if len(s) == 0:
-        return None
-    h, m, s = [int(v) for v in s.split(':')]
-    return 3600*h + 60 *m + s
-
-def timefromdatestr(s):
-    """ Decode from text like <date><space>00:00:00"""
-    if len(s) == 0:
-        return None
-    return timefromtimestr(s.split(' ')[1])
-
-def decode(d, name):
-    if len(d[name]) > 0:
-        return d[name]
-    else:
-        return None
-
 try:
     # if C version is available:
     import cPickle as pickle
@@ -76,6 +55,18 @@ class NumSequence(object):
     (0, 1, 2, 3)
     >>> p.y
     (10, 20, 30, 40)
+    >>> p.store('profile.dat')
+    >>> pnew = NumSequence()
+    >>> pnew.load('profile.dat')
+    >>> p.len
+    4
+    >>> p.min
+    10
+    >>> p.max
+    40
+    >>> y = p.selectrandom()
+    >>> p.min <= y <= p.max
+    True
     """
 
     stored_attrs = ['_label', '_values']
@@ -105,6 +96,12 @@ class NumSequence(object):
         self._values.append(value)
         return self # for chaining
     
+    def selectrandom(self):
+        if self.len == 0:
+            raise ENumSequenceError('Cannot select random element from empty set.')
+        index = random.randrange(0, self.len)
+        return self.y[index]
+    
     def _update(self):
         "Update before return values, if necessary"
         pass
@@ -113,7 +110,6 @@ class NumSequence(object):
         self._values = list(data)
         self._update()
         return self # for chaining
-
 
     def copyfrom(self, source):
         "Set object data from other object"
@@ -258,7 +254,7 @@ class NumSet(NumSequence):
     ((0, 1), (30, 40))
     """
     def __init__(self, label='Data set'):
-        NumSequence.__init__(self, label)
+        NumSequence.__init__(self, label=label)
         self._needsorting = False
 
     def _update(self):
@@ -370,12 +366,16 @@ class Histogram(NumXY):
     Data set: min: 0, mean: 16.6666666667, max:40, sum: 150, count: 9
     >>> p.y
     (0, 10, 10, 10, 10, 20, 20, 30, 40)
-    >>> h = Histogram(source=p, bins=3)
+    >>> h = Histogram(label='test Histogram', source=p, bins=3)
     >>> h._values
     [(10.0, 5), (20.0, 2), (30.0, 1), (40.0, 1)]
+    >>> h
+    
     """
     def __init__(self, label="Histogram", source=None, bins=10):
-        NumXY.__init__(self, label)
+        NumXY.__init__(self, label=label)
+        #~ print 'label:', label
+        #~ print 'source', source
         if isinstance(source, NumSequence) and source.len > 0: 
             self._build(source.y, bins)
         else:

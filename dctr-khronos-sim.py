@@ -4,6 +4,8 @@ from khronos.statistics import TSeries, Plotter
 
 import numpy
 
+import statistics
+
 import dctr as predict
 
 class Call(Process):
@@ -12,7 +14,7 @@ class Call(Process):
     # settings
     ctr_integral_gain = 0.05
     ctr_proportional_gain = 2.0
-    predict_adjust = 150.0
+    predict_adjust = 100.0
 
     # criterions for progressive mode:
     uptime_threshold = 5 * 60 # 5 minutes in seconds
@@ -20,7 +22,7 @@ class Call(Process):
     min_idle_agents = 3    
     
     target_abandon_calls = 2.5 / 100 # %
-    max_abandon_calls = 3.0 /100 # %
+    max_abandon_calls = 2.6 /100 # %
     
     # state definition:
     total_agents = None # will be assigned from model
@@ -43,6 +45,10 @@ class Call(Process):
     
     predicted_calls = 0
     
+    c_duration = statistics.NumSet()
+    c_duration.load('c_duration.dat')
+    #~ c10_duration.store('c10_duration.dat')
+    
     def is_answered(self):
         p = self.sim.rng.uniform(0, 1)
         if p < Call.p_answer:
@@ -53,12 +59,13 @@ class Call(Process):
         # assume uniform distribution for call duration
         # to-do: poisson or erlang distribution (?)
         #~ return self.sim.rng.uniform(Call.talk_time_min, Call.talk_time_max)
-        return numpy.random.poisson(70)
+        #~ return numpy.random.poisson(70)
+        return Call.c_duration.selectrandom()
 
     @Chain
     def initialize(self):
         # Update "uptime"
-        Call.uptime = int(self.sim.time) # convert to seconds (for solver)
+        Call.uptime = int(10 * 3600) # convert to seconds (for solver)
         # Count calls:
         Call.calls_total += 1
         
@@ -71,12 +78,17 @@ class Call(Process):
                 # aquire agent:
                 Call.idle_agents -= 1
                 # wait until conversation finished:
-                yield self.service_time()
+                duration = self.service_time()
+                #~ print 'Idle agents: ', Call.idle_agents,' Call duration: ', duration, ' calls_total: ', Call.calls_total, ' calls_answered: ', Call.calls_answered
+                yield duration
                 # release agent:
                 Call.idle_agents += 1
                 # update served count:
                 Call.calls_served +=1
                 yield Signal("AgentIsIdle")
+            else:
+                #~ print 'All agents busy'
+                yield 0
 
         pass # end                
 
@@ -99,7 +111,7 @@ class Call(Process):
 class CallCenterSim(Simulator):
     """Generates customer traffic and resets 'served' and 'happy' counters at initialization."""
     #~ rate = 40.0 # clients per hour (arrival rate)
-    rate = 2 # outbound calls per second
+    rate = 0.65 # outbound calls per second
     
     total_agents = 0
     
@@ -107,7 +119,7 @@ class CallCenterSim(Simulator):
 
     def reset(self):
         Call.autoname_reset()
-
+        # Set actual values for prediction algorithm
         Call.ctr_integral_gain = 0.05
         Call.ctr_proportional_gain = 2.0
         Call.predict_adjust = 150.0
@@ -117,8 +129,8 @@ class CallCenterSim(Simulator):
         Call.calls_threshold = 10
         Call.min_idle_agents = 3    
         
-        Call.target_abandon_calls = 3.0 /100 # % 2.5 / 100 # %
-        Call.max_abandon_calls = 3.0 /100 # %
+        Call.target_abandon_calls = 2.7 /100 # % 2.5 / 100 # %
+        Call.max_abandon_calls = 2.95 /100 # %
         
         # state definition:
         total_agents = CallCenterSim.total_agents 
@@ -144,11 +156,13 @@ class CallCenterSim(Simulator):
                 #~ yield 5.0/3600
                 #~ yield (1.0/rate)/3600
             #~ yield Listener('AgentIsIdle')  
-            #~ Call.predicted_calls = CallCenterSim.solver.predict_outgoing_calls()
+            Call.predicted_calls = CallCenterSim.solver.predict_outgoing_calls()
 
 
-            self.launch(Call())
-            yield 1/CallCenterSim.rate
+            for i in range(0, Call.predicted_calls): self.launch(Call())
+            
+            yield Listener('AgentIsIdle')  
+            #~ yield 1/CallCenterSim.rate
             #~ yield self.rng.expovariate(CallCenterSim.rate)
 
 
@@ -172,7 +186,7 @@ class Collector(Process):
 def main_collection():
     colors = ("red", "green", "blue", "yellow", "black")
     plotter = Plotter()
-    for n in (22,):
+    for n in (23,):
         print "n =", n
         CallCenterSim.total_agents = n
         sim = CallCenterSim("callcenter")
@@ -184,7 +198,7 @@ def main_collection():
             sim.single_run(10*3600) # 10 hour
             sim["collector"].stat.run_chart(axes=axes, color=colors[run])
             pcnt_abandoned = compute_abandoned()
-            print "\trun %d, abandoned = %.2f%%, total = %i, served = %i, answered = %i, predicted = %i, idle_agents = %i, p_adjust = %i" % (run, 100.0 * pcnt_abandoned, Call.calls_total, Call.calls_served, Call.calls_answered, Call.predicted_calls, Call.idle_agents, Call.predict_adjust)
+            print "\trun %d, abandoned = %.2f%%, total = %i, served = %i, answered = %i" % (run, 100.0 * pcnt_abandoned, Call.calls_total, Call.calls_served, Call.calls_answered)
         axes.set_title("%d lines and staff" % (n,))
         axes.set_xlabel("Time (days)")
         axes.set_ylabel("Abandoned calls (%)")
@@ -192,7 +206,8 @@ def main_collection():
         plotter.update()
         
         print '---'
-        print "\trun Summary:, abandoned = %.2f%%, total = %i, served = %i, answered = %i, predicted = %i, idle_agents = %i" % (100.0 * pcnt_abandoned, Call.calls_total, Call.calls_served, Call.calls_answered, Call.predicted_calls, Call.idle_agents)
+        print "\trun Summary:, abandoned = %.2f%%, total = %i, served = %i, answered = %i" % (100.0 * pcnt_abandoned, Call.calls_total, Call.calls_served, Call.calls_answered)
+        raw_input('Press "Enter" to continue')
 
 if __name__ == "__main__":
     main_collection()

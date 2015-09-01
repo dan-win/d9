@@ -80,9 +80,6 @@ def expovariate(k, lambd, size):
     return buff
 
 def main():
-    h_duration_profile = []
-    h_dialing_profile = []
-    h_calls_profile = []
     d_agents = {}
 
     t_uptime = 0
@@ -94,8 +91,10 @@ def main():
     vmin = 0
     vmax = 2000
     quantum = 2
-    c_duration = NumSet(label='Call duration')
-    c10_duration = NumSet(label='Call duration (calls longer than 10 sec)')
+    c_duration = statistics.NumSet(label='Call duration')
+    c10_duration = statistics.NumSet(label='Call duration (calls longer than 10 sec)')
+    c_calls_distribution = statistics.NumXY(label='Calls distribution by day time')
+    c_dialing_profile = statistics.NumSet(label='Dialing duration')
     #~ c_dmodel_poisson = PoissonProfile(vmin, vmax, quantum, k = 0.5, lam = 1)
     #~ c_dmodel_expovariate = ExpovarianteProfile(vmin, vmax, quantum, k = 0.5, lam = 1)
     #~ c_dmodel_lognormal = LognormalProfile(vmin, vmax, quantum, mean=38, sigma = 3600)
@@ -113,12 +112,12 @@ def main():
             
             call_time = line['call_time'] = timefromdatestr(line['call_time']) 
             n_calls += 1
-            heappush(h_calls_profile, call_time)
+            c_calls_distribution.append(call_time, 1)
             talk_time = line['talk_time'] = timefromdatestr(line['talk_time']) 
             
             if talk_time is not None and  call_time is not None:
                 dialing_time = line['dialing_time'] = talk_time - call_time
-                heappush(h_dialing_profile, dialing_time) 
+                c_dialing_profile.append(dialing_time)
             else:
                 dialing_time = line['dialing_time'] = None
             
@@ -129,7 +128,6 @@ def main():
             if call_duration and call_duration > 10:
                 n_answered_calls += 1
                 t_service_time += call_duration
-                heappush(h_duration_profile, call_duration) 
                 c10_duration.append(call_duration)
                 #~ c_dmodel_poisson.update()
                 #~ c_dmodel_expovariate.update()
@@ -157,15 +155,21 @@ def main():
             data = data[:i]
         return data
         
-    h_calls_profile = Histogram(label='Histogram: call duration', source=c_duration, bins=20)
-    h_calls10_profile = Histogram(label='Histogram: call duration (call duration > 10 sec)', source=c10_duration, bins=20)
+    h_calls_profile = statistics.Histogram(label='Histogram: call duration', source=c_duration, bins=20)
+    h_calls10_profile = statistics.Histogram(label='Histogram: call duration (call duration > 10 sec)', source=c10_duration, bins=20)
+    h_dialing_profile = statistics.Histogram(label='Histogram: duration of dialing', source=c_dialing_profile)
 
     print "Results are below, see also on the popup plot window"
-    print "Maximum value of call duration (sec): %f" % max(h_duration_profile)
-    print "Minimal value of call duration (sec): %f" % min(h_duration_profile)
-
-    print "Maximum value of dialing duration (sec * 10): %f" % max(h_dialing_profile)
-    print "Minimal value of dialing duration (sec * 10): %f" % min(h_dialing_profile)
+    print c_duration
+    print c10_duration
+    print c_calls_distribution
+    
+    print h_dialing_profile
+    print h_calls10_profile
+    print h_calls_profile
+    
+    c_duration.store('c_duration.dat')
+    c10_duration.store('c10_duration.dat')
 
     print "Agents total: %i" % n_agents
     print "Call-center Uptime: %i" % t_uptime
@@ -183,14 +187,6 @@ def main():
     print "Average call duration: %f" % average_call_duration
     print "Weighted average call duration: %f" % weighted_average_call_duration
 
-    print '---'
-    print c_duration
-    print c10_duration
-    print '---'
-
-    print h_calls_profile
-    print h_calls10_profile
-    print '---'
     
     #~ print 'Poisson model: ', c_dmodel_poisson
     #~ print 'Expovariante model: ', c_dmodel_expovariate
