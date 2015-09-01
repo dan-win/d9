@@ -225,8 +225,8 @@ class PIEnvironment(Environment):
         self.calls_threshold = 10
         self.min_idle_agents = 3
 
-        self.target_abandon_calls = 2.5 / 100 # %
-        self.max_abandon_calls = 2.7 /100 # %
+        self.target_abandon_calls = 2.7 / 100 # %
+        self.max_abandon_calls = 2.95 /100 # %
         # set default values:
 
         #~ self.total_agents = 0

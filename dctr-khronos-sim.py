@@ -1,3 +1,5 @@
+# fix division problem:
+from __future__ import division
 from khronos.des import Simulator, Process, Chain, Signal, Listener
 from khronos.des.extra.components.resources import Resource
 from khronos.statistics import TSeries, Plotter
@@ -32,6 +34,8 @@ class Call(Process):
     calls_answered = 0 # total answered
     calls_congested = 0 # due to network overload, to-do
     calls_served = 0 # total served, abandon = calls_answered-calls_served
+    
+    total_service_time = 0
     
     uptime = 0
     interval = 0
@@ -81,6 +85,8 @@ class Call(Process):
                 duration = self.service_time()
                 #~ print 'Idle agents: ', Call.idle_agents,' Call duration: ', duration, ' calls_total: ', Call.calls_total, ' calls_answered: ', Call.calls_answered
                 yield duration
+                # update service time
+                Call.total_service_time += duration
                 # release agent:
                 Call.idle_agents += 1
                 # update served count:
@@ -144,6 +150,7 @@ class CallCenterSim(Simulator):
         Call.calls_served = 0 # total served, abandon = calls_answered-calls_served
         
         Call.uptime = 0
+        Call.total_service_time = 0
         
         CallCenterSim.solver.observe(Call)
 
@@ -186,7 +193,8 @@ class Collector(Process):
 def main_collection():
     colors = ("red", "green", "blue", "yellow", "black")
     plotter = Plotter()
-    for n in (23,):
+    n_agents = 23
+    for n in (n_agents,):
         print "n =", n
         CallCenterSim.total_agents = n
         sim = CallCenterSim("callcenter")
@@ -198,7 +206,7 @@ def main_collection():
             sim.single_run(10*3600) # 10 hour
             sim["collector"].stat.run_chart(axes=axes, color=colors[run])
             pcnt_abandoned = compute_abandoned()
-            print "\trun %d, abandoned = %.2f%%, total = %i, served = %i, answered = %i" % (run, 100.0 * pcnt_abandoned, Call.calls_total, Call.calls_served, Call.calls_answered)
+            print "\trun %d, abandoned = %.2f%%, total = %i, served = %i, answered = %i, idle time rate (percent): %f" % (run, 100.0 * pcnt_abandoned, Call.calls_total, Call.calls_served, Call.calls_answered, 100-(Call.total_service_time *100) / (10 * 3600 * n))
         axes.set_title("%d lines and staff" % (n,))
         axes.set_xlabel("Time (days)")
         axes.set_ylabel("Abandoned calls (%)")
@@ -206,7 +214,7 @@ def main_collection():
         plotter.update()
         
         print '---'
-        print "\trun Summary:, abandoned = %.2f%%, total = %i, served = %i, answered = %i" % (100.0 * pcnt_abandoned, Call.calls_total, Call.calls_served, Call.calls_answered)
+        print "\trun Summary:, abandoned = %.2f%%, total = %i, served = %i, answered = %i, idle time rate (percent): %f" % (100.0 * pcnt_abandoned, Call.calls_total, Call.calls_served, Call.calls_answered, 100-(Call.total_service_time *100 ) / (10 * 3600 * n_agents))
         raw_input('Press "Enter" to continue')
 
 if __name__ == "__main__":
