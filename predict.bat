@@ -1,1 +1,1 @@
-python dctr-cli.py idle_agents=5 calls_total=100 calls_answered=30 calls_served=30 uptime=600 interval=300 debug=1
+python dctr-cli.py idle_agents=5 calls_total=3000 calls_answered=1000 calls_served=970 uptime=600 interval=300 predict_adjust=100 debug=1

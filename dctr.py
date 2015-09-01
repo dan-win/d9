@@ -418,7 +418,7 @@ class PIController(ProgressiveSolver):
         I_value = self.integrator * e.ctr_integral_gain
         _trace('I_value={}'.format(I_value))
 
-        e.predict_adjust = e.predict_adjust + (P_value + I_value) * 100        
+        e.predict_adjust = e.predict_adjust + (P_value + I_value) #* 100        
         _trace('e.predict_adjust={}'.format(e.predict_adjust))
 
         calls_to_dial = math.trunc(e.idle_agents + (over_dial * e.predict_adjust) * 0.01)
